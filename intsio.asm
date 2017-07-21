@@ -49,6 +49,11 @@ ser2BufUsed     .EQU     ser2RdPtr+2
 
 ser2InMask      .EQU     ser2InPtr&$FF
 
+keypad_last_keycode .EQU	$80A0
+keypad_shift		.EQU	$80A1
+keypad_buffer		.EQU	$80A2
+display_char_index	.EQU	$80A3
+
 TEMPSTACK       .EQU     $FFF0           ; temporary stack somewhere near the
                                          ; end of high mem
 
@@ -104,6 +109,25 @@ RST28            JP      SETBAUDB
 
                 .ORG     0038H
 RST38            JR      serialInt
+
+;------------------------------------------------------------------------------
+; RST 3C - INTERRUPT VECTOR [ for IM 2 ]
+
+                .ORG     003CH
+RST3C           .WORD    serialInt
+				.WORD	 0H
+
+;------------------------------------------------------------------------------
+; RST 40 - INTERRUPT VECTOR [ for IM 2 ]
+
+                .ORG     0040H
+RST40           .WORD	 pioInt
+				.WORD	 0H
+
+;------------------------------------------------------------------------------
+; PIO isr - do nothing for now
+pioInt:			EI
+				RETI
 
 ;------------------------------------------------------------------------------
 serialInt:      PUSH     AF
@@ -269,7 +293,28 @@ conout1_2:      SUB      A
                 JR       Z,conout1_2     ; Loop until flag signals ready
                 POP      AF              ; Retrieve character
                 OUT      (SIOB_D),A      ; Output the character
-                RET
+				PUSH		AF
+				PUSH		BC	
+				CP		 $0A			; test for linefeed
+				JR		NZ, TXB_NOT_LF	
+	
+				CALL	display_clear
+				JP		TXB_END
+TXB_NOT_LF:		
+				CP		'a'	
+				JR		C, TXB_NOT_LCASE	; character is < 'a'
+				CP		'z'+1
+				JR		NC,	TXB_NOT_LCASE	; character is > 'z'
+				AND		A, $DF				; mask bit 5
+				
+TXB_NOT_LCASE:
+
+				LD		C,A
+				CALL	display_send_byte
+TXB_END:		
+				POP		BC
+                POP		AF
+				RET
 
 ;------------------------------------------------------------------------------
 CKINCHAR:       LD       A,(serBufUsed)
@@ -339,9 +384,123 @@ NOT19200:       CP       115
                 OUT      (CTC_PORTB), A
 NOT115200:      RET
 
+
+display_print_string:
+    ; pointer to the string is in HL
+    ; the string must be terminated with a 0 byte
+    LD A,(HL)
+    INC HL
+    OR A
+    RET Z
+    LD C,A
+    CALL display_send_byte
+    JR display_print_string
+
+display_clear:
+	PUSH	BC
+	PUSH	DE
+    LD C,$AF           ; set the cursor to the beginning of the line
+    CALL display_send_byte
+    LD D,$10           ; 16 spaces to print
+display_clear_l1:
+	LD C,' '
+    CALL display_send_byte
+    DEC D
+    JR NZ,display_clear_l1
+	POP		DE
+	POP		BC
+    RET
+
+display_send_byte:
+    ; byte to be sent is in C
+    ; note the display controller does not support lower-case letters!
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+    LD B,$08           ; 8 bits to send
+display_send_byte_l1:
+	IN A,($00)         ; get current port state
+    RLA                 ; rotate the port word until the data bit is in the carry flag
+    RLA
+    RLA
+    RL C                ; shift the next output data bit into the carry flag
+    RRA                 ; rotate the port word until the data bit is in bit 5
+    RRA
+    RRA
+    OUT ($00),A        ; setup the output bit
+    OR $40             ; set clock high (bit 6)
+    OUT ($00),A
+    AND $BF            ; set clock low (bit 6)
+    OUT ($00),A
+    DJNZ display_send_byte_l1  ; continue with the next bit
+	POP		DE
+	POP		BC
+	POP		AF
+    RET
+
+keypad_read:
+    ; columns can be activated by setting port 0 bits 3-0 low
+    ; active rows be detected by sensing port 2 bits 3-0 low
+    LD C,$FE           ; initial column mask
+keypad_read_l1:
+	IN A,($00)         ; get current port state
+    OR $0F             ; disable all columns
+    AND C               ; activate next column
+    OUT ($00),A        
+    IN A,($02)         ; read result
+    AND $0F            ; mask the rows
+    CP $0F             ; any rows active?
+    JR NZ,keypad_read_key
+    RLC C               ; adjust column mask
+    LD A,$EF           ; was that the last column?
+    CP C
+    JR NZ,keypad_read_l1           ; next column
+    LD A,$00           ; no keys are pressed
+    RET
+
+keypad_read_key:    
+    LD B,A              ; put row data in B
+    LD A,$00           ; initialize key code
+keypad_read_key_l4:
+	SRA B               ; shift right row data
+    JR NC,keypad_read_key_l3           ; was that the active row?
+    ADD A,$04          ; no, add 4 to key code
+    JR keypad_read_key_l4
+keypad_read_key_l3:
+	SRA C               ; shift right column data
+    JR NC,keypad_read_key_l5           ; was that the active column?
+    INC A               ; no, add 1 to key code
+    JR keypad_read_key_l3
+keypad_read_key_l5:
+	INC A               ; convert to 1-based key code
+    RET
+
+keycode_to_ascii:
+    ; keycode is in A, result is returned in A
+    SLA A               ; multiply keycode by 4
+    SLA A
+    LD HL,keypad_shift
+    ADD A,(HL)          ; add the shift value
+    LD E,A
+    LD D,$00
+    LD HL,keycode_table-4
+    ADD HL,DE
+    LD A,(HL)
+    RET
+    
+keycode_table:
+    .byte "1QZ.2ABC3DEFA   4GHI5JKL6MNOB   7PRS8TUV9WXYC   *,'"
+	.byte 22H
+	.byte "0- +#:;@D   "
+
+
+
 ;------------------------------------------------------------------------------
 INIT:          LD        HL,TEMPSTACK    ; Temp stack
                LD        SP,HL           ; Set up a temporary stack
+				IM 2                ; use mode 2 interrupts
+				LD A,00H            ; interrupt vectors in page 0
+				LD I,A
 
 ;       Initialise SIO
 
@@ -387,7 +546,7 @@ INIT:          LD        HL,TEMPSTACK    ; Temp stack
 
                 LD      A,$02           ; write reg 2
                 OUT     (SIOB_C),A
-                LD      A,$E0           ; INTERRUPT VECTOR ADDRESS
+                LD      A,$3C           ; INTERRUPT VECTOR ADDRESS
                 OUT     (SIOB_C),A
 
 
@@ -433,8 +592,49 @@ SRAM_WIPEL:		LD		A, 0
                XOR       A               ;0 to accumulator
                LD        (ser2BufUsed),A
 
+; From BMOW: init addl hw
+
+    ; init port 0 - controls the display (bits 6,5,4) and keypad columns (bits 3,2,1,0)
+    ; port 1 is the control register for port 0
+    LD A,$CF           ; we want to control each port bit individually
+    OUT ($01),A	
+    LD A,$80           ; bit 7 is input, others are outputs
+    OUT ($01),A
+    LD A,$40           ; use interrupt vector 18
+    OUT ($01),A
+    LD A,$97           ; generate interrupt if any masked bit is low
+    OUT ($01),A
+    LD A,$7F           ; mask = bit 7
+    OUT ($01),A
+	
+    LD A,$3F           ; set the initial output values for port 0	
+    OUT ($00),A
+	
+    ; initialize the display
+    IN A,($00)         ; get current port state
+    AND $EF            ; clear bit 4 (display reset)
+    OUT ($00),A
+    LD B,$1C           ; wait $1C cycles
+DISP_INIT1:
+    DJNZ DISP_INIT1
+    OR $10             ; set bit 4 (display reset)
+    OUT ($00),A 
+    LD C,$FF           ; set the display duty cycle to 31 (maximum brightness)
+    CALL display_send_byte
+    
+    ; initialize the keypad input
+    LD HL,keypad_last_keycode
+    LD (HL),$00
+    LD HL,keypad_shift
+    LD (HL),$00
+    ; print a prompt message
+    CALL display_clear
+    LD HL,WELCOME
+    CALL display_print_string
+    
+
+
                ; enable interrupts
-               IM        1
                EI
                 ; Clear any pending SIO port B interrupts
                 LD      A,$00            ; write 0
@@ -445,6 +645,9 @@ SRAM_WIPEL:		LD		A, 0
 				LD		A, 'I'
 				CALL	TXB
 
-               JP        $290             ; Run the program
+               JP        $400             ; Run the program
+
+
+WELCOME: .BYTE   "Hi",0,0
 
 END

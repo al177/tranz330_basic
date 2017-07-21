@@ -155,7 +155,7 @@ I6      .EQU    I0+6
 I7      .EQU    I0+7
 
         .ORG    0               ; necessary for zasm
-        .ORG    00290H
+        .ORG    00400H
 
 COLD:   JP      STARTB          ; Jump for cold start
 WARM:   JP      WARMST          ; Jump for warm start
