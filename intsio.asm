@@ -367,7 +367,7 @@ INIT:          LD        HL,TEMPSTACK    ; Temp stack
 
                 LD      A,$05            ; write 5
                 OUT     (SIOA_C),A
-                LD      A,RTS_HIGH        ; dtr enable, 8 bits, tx enable, rts
+                LD      A,RTS_LOW		; dtr enable, 8 bits, tx enable, rts
                 OUT     (SIOA_C),A
 
                 LD      A,$30
@@ -393,7 +393,7 @@ INIT:          LD        HL,TEMPSTACK    ; Temp stack
 
                 LD      A,$05
                 OUT     (SIOB_C),A
-                LD      A,RTS_HIGH
+                LD      A,RTS_LOW
                 OUT     (SIOB_C),A
                 
 				LD      A,$03
