@@ -8,3 +8,5 @@ Based on Scott Baker's RC2014 SIO BIOS and BASIC at https://github.com/sbelectro
 ...which is based on NASCOM ROM BASIC 4.7 scanned from a magazine...
 
 ...which is MS BASIC.
+
+Includes portions of the "Mozart's Credit Card" demo from BMOW at https://www.bigmessowires.com/mozart-tranz-330/
