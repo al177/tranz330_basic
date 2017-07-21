@@ -189,6 +189,7 @@ MSIZE:  LD      HL,MEMMSG       ; Point to message
         CALL    PRS             ; Output "Memory size"
         CALL    PROMPT          ; Get input with '?'
         CALL    GETCHR          ; Get next character
+		CALL	MONOUT
         OR      A               ; Set flags
         JP      NZ,TSTMEM       ; If number - Test if RAM there
         LD      HL,STLOOK       ; Point to start of RAM
@@ -4281,7 +4282,8 @@ ATNTAB: .BYTE   9                       ; Table used by ATN
 
 ARET:   RET                     ; A RETurn instruction
 
-GETINP: RST	    10H             ;input a character
+GETINP: LD		A, 0
+		RST	    10H             ;input a character
         RET
 
 CLS: 

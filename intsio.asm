@@ -25,12 +25,12 @@ SER_FULLSIZE    .EQU     30H
 SER_EMPTYSIZE   .EQU     5
 
 ; Address of CTC for PORT B serial for setting baud rates
-CTC_PORTB       .EQU     91H
+CTC_PORTB       .EQU     11H
 
-SIOA_D          .EQU     $80
-SIOA_C          .EQU     $82
-SIOB_D          .EQU     $81
-SIOB_C          .EQU     $83
+SIOA_D          .EQU     $20
+SIOA_C          .EQU     $21
+SIOB_D          .EQU     $22
+SIOB_C          .EQU     $23
 
 RTS_HIGH        .EQU    0E8H
 RTS_LOW         .EQU    0EAH
@@ -67,26 +67,26 @@ RST00           DI                       ;Disable interrupts
 ; TX a character over RS232 
 
                 .ORG     0008H
-RST08            JP      TXA
+RST08            JP      TXB
 
 ;------------------------------------------------------------------------------
 ; RX a character over RS232 Channel, hold here until char ready.
 ; Reg A = 0 for port A, 1 for port B
 
                 .ORG 0010H
-RST10            JP      RXA
+RST10            JP      RXB
 
 ;------------------------------------------------------------------------------
 ; Check serial status
 ; Reg A = 0 for port A, 1 for port B
 
                 .ORG 0018H
-RST18            JP      CKINCHAR
+RST18            JP      CKINCHARB
 
 ;------------------------------------------------------------------------------
 ; TX a character over RS232 Channel B [Console]
                 .ORG 0020H
-RST20            JP      TXB
+RST20            JP      TXA
 
 ;------------------------------------------------------------------------------
 ; Set Baud rate
@@ -110,6 +110,7 @@ serialInt:      PUSH     AF
                 PUSH     HL
 
                 SUB      A
+
                 OUT      (SIOA_C),A
                 IN       A, (SIOA_C)
                 RRCA
@@ -186,8 +187,6 @@ rts0:           POP      HL
 
 ;------------------------------------------------------------------------------
 RXA:
-                CP      1               ; is A==1 ?
-                JR      Z, RXB
 waitForChar:    LD       A,(serBufUsed)
                 CP       $00
                 JR       Z, waitForChar
@@ -218,6 +217,8 @@ rts1:
 
 ;------------------------------------------------------------------------------
 RXB:
+                CP      1               ; is A==1 ?
+                JR      Z, RXA
 waitForChar2:   LD       A,(ser2BufUsed)
                 CP       $00
                 JR       Z, waitForChar2
@@ -271,9 +272,7 @@ conout1_2:      SUB      A
                 RET
 
 ;------------------------------------------------------------------------------
-CKINCHAR:       CP      1               ; is A==1 ?
-                JR      Z, CKINCHARB
-                LD       A,(serBufUsed)
+CKINCHAR:       LD       A,(serBufUsed)
                 CP       $0
                 RET
 
@@ -294,7 +293,10 @@ PRINTB:         LD       A,(HL)          ; Get character
                 RET
 
 ;------------------------------------------------------------------------------
-CKINCHARB:      LD       A,(ser2BufUsed)
+
+CKINCHARB:      CP      1               ; is A==1 ?
+                JR      Z, CKINCHAR
+		        LD       A,(ser2BufUsed)
                 CP       $0
                 RET
 
@@ -306,34 +308,34 @@ SETBAUDB:       CP       1
                 JR       NZ, NOT1200
                 LD       A, $5D
                 OUT      (CTC_PORTB), A  ; 1200
-                LD       A, 96
+                LD       A, 48 
                 OUT      (CTC_PORTB), A
                 RET
 NOT1200:        CP       2
                 JR       NZ, NOT2400
                 LD       A, $5D
                 OUT      (CTC_PORTB), A  ; 2400
-                LD       A, 48
+                LD       A, 24
                 OUT      (CTC_PORTB), A
                 RET
 NOT2400:        CP       9
                 JR       NZ, NOT9600
                 LD       A, $5D
                 OUT      (CTC_PORTB), A  ; 9600
-                LD       A, 24
+                LD       A, 12
                 OUT      (CTC_PORTB), A
                 RET
 NOT9600:        CP       19
                 JR       NZ, NOT19200
                 LD       A, $5D
                 OUT      (CTC_PORTB), A  ; 19200
-                LD       A, 12
+                LD       A, 6
                 OUT      (CTC_PORTB), A
 NOT19200:       CP       115
                 JR       NZ, NOT115200
                 LD       A, $5D
                 OUT      (CTC_PORTB), A  ; 115200
-                LD       A, 2
+                LD       A, 1
                 OUT      (CTC_PORTB), A
 NOT115200:      RET
 
@@ -343,19 +345,19 @@ INIT:          LD        HL,TEMPSTACK    ; Temp stack
 
 ;       Initialise SIO
 
-                LD      A,$00            ; write 0
+                LD      A,$30            ; write 0
                 OUT     (SIOA_C),A
                 LD      A,$18            ; reset ext/status interrupts
                 OUT     (SIOA_C),A
 
                 LD      A,$04            ; write 4
                 OUT     (SIOA_C),A
-                LD      A,$C4            ; X64, no parity, 1 stop
+                LD      A,$44            ; X64, no parity, 1 stop
                 OUT     (SIOA_C),A
 
                 LD      A,$01            ; write 1
                 OUT     (SIOA_C),A
-                LD      A,$18            ; interrupt on all recv
+                LD      A,$00            ; no interrupt
                 OUT     (SIOA_C),A
 
                 LD      A,$03            ; write 3
@@ -365,10 +367,10 @@ INIT:          LD        HL,TEMPSTACK    ; Temp stack
 
                 LD      A,$05            ; write 5
                 OUT     (SIOA_C),A
-                LD      A,RTS_LOW        ; dtr enable, 8 bits, tx enable, rts
+                LD      A,RTS_HIGH        ; dtr enable, 8 bits, tx enable, rts
                 OUT     (SIOA_C),A
 
-                LD      A,$00
+                LD      A,$30
                 OUT     (SIOB_C),A
                 LD      A,$18
                 OUT     (SIOB_C),A
@@ -388,21 +390,34 @@ INIT:          LD        HL,TEMPSTACK    ; Temp stack
                 LD      A,$E0           ; INTERRUPT VECTOR ADDRESS
                 OUT     (SIOB_C),A
 
-                LD      A,$03
-                OUT     (SIOB_C),A
-                LD      A,$E1
-                OUT     (SIOB_C),A
 
                 LD      A,$05
                 OUT     (SIOB_C),A
-                LD      A,RTS_LOW
+                LD      A,RTS_HIGH
+                OUT     (SIOB_C),A
+                
+				LD      A,$03
+                OUT     (SIOB_C),A
+                LD      A,$C1			; Enable RX, 8 bit, no auto, no CRC
                 OUT     (SIOB_C),A
 
                ; baud generator for 2nd serial port, default to 115200
                LD       A, 5DH
                OUT      (CTC_PORTB), A  ; 115200
-               LD       A, 2
+               LD       A, 1
                OUT      (CTC_PORTB), A
+				LD		A, 'H'
+				CALL	TXB
+
+				; Wipe SRAM
+				LD		BC, 8000H
+SRAM_WIPEL:		LD		A, 0
+				LD		(BC), A
+				INC		BC
+				LD		A,B
+				OR		C
+				JR		NZ, SRAM_WIPEL
+
 
                ; initialize first serial port
                LD        HL,serBuf
@@ -421,6 +436,14 @@ INIT:          LD        HL,TEMPSTACK    ; Temp stack
                ; enable interrupts
                IM        1
                EI
+                ; Clear any pending SIO port B interrupts
+                LD      A,$00            ; write 0
+                OUT     (SIOB_C),A
+                LD      A,$10            ; reset ext/status interrupts
+                OUT     (SIOB_C),A
+				
+				LD		A, 'I'
+				CALL	TXB
 
                JP        $290             ; Run the program
 
