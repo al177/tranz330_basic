@@ -52,7 +52,7 @@ ser2InMask      .EQU     ser2InPtr&$FF
 keypad_last_keycode .EQU	$80A0
 keypad_shift		.EQU	$80A1
 keypad_buffer		.EQU	$80A2
-display_char_index	.EQU	$80A3
+display_last_char	.EQU	$80A3
 
 TEMPSTACK       .EQU     $FFF0           ; temporary stack somewhere near the
                                          ; end of high mem
@@ -293,14 +293,20 @@ conout1_2:      SUB      A
                 JR       Z,conout1_2     ; Loop until flag signals ready
                 POP      AF              ; Retrieve character
                 OUT      (SIOB_D),A      ; Output the character
-				PUSH		AF
-				PUSH		BC	
-				CP		 $0A			; test for linefeed
-				JR		NZ, TXB_NOT_LF	
-	
-				CALL	display_clear
-				JP		TXB_END
+
+				PUSH	AF
+				PUSH	BC	
+				CP		$0A			; is the current character a linefeed?
+				JR		Z, TXB_SAVE_LAST_CHAR	; if so then do nothing but save the LF
+				CP		' '			; is the current character nonprintable?
+				JR		C, TXB_END	; if so then do nothing at all
+				LD		C, A
+				LD		A, (display_last_char)
+				CP		$0A				; is the previous character a linefeed?
+				JR		NZ, TXB_NOT_LF	; if not then print the character
+				CALL	display_clear	; else clear then print the character
 TXB_NOT_LF:		
+				LD		A, C
 				CP		'a'	
 				JR		C, TXB_NOT_LCASE	; character is < 'a'
 				CP		'z'+1
@@ -308,10 +314,13 @@ TXB_NOT_LF:
 				AND		A, $DF				; mask bit 5
 				
 TXB_NOT_LCASE:
-
-				LD		C,A
+				LD		C, A
 				CALL	display_send_byte
-TXB_END:		
+
+TXB_SAVE_LAST_CHAR:
+				; save the character we transmitted for next time
+				LD		(display_last_char), A
+TXB_END:				
 				POP		BC
                 POP		AF
 				RET
@@ -627,6 +636,10 @@ DISP_INIT1:
     LD (HL),$00
     LD HL,keypad_shift
     LD (HL),$00
+
+	; initialize last character lookup	
+	LD A, '*'
+	LD (display_last_char), A
     ; print a prompt message
     CALL display_clear
     LD HL,WELCOME
