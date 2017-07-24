@@ -10,3 +10,5 @@ Based on Scott Baker's RC2014 SIO BIOS and BASIC at https://github.com/sbelectro
 ...which is MS BASIC.
 
 Includes portions of the "Mozart's Credit Card" demo from BMOW at https://www.bigmessowires.com/mozart-tranz-330/
+
+Build directions are forthcoming.  If you want to try this on your own hardware, flash tranz330_basic.rom to the bottom of a 27256 EPROM.
