@@ -53,6 +53,7 @@ keypad_last_keycode .EQU	$8090
 keypad_shift		.EQU	$8091
 keypad_buffer		.EQU	$8092
 display_last_char	.EQU	$8093
+display_ptr			.EQU	$8094
 
 TEMPSTACK       .EQU     $FFF0           ; temporary stack somewhere near the
                                          ; end of high mem
@@ -304,8 +305,17 @@ conout1_2:      SUB      A
 				LD		A, (display_last_char)
 				CP		$0A				; is the previous character a linefeed?
 				JR		NZ, TXB_NOT_LF	; if not then print the character
+				; suppress INPUT "? " prompt on VFD
+				LD		A, C
+				CP		'?'				; is the character a '?'
+				JR		Z, TXB_END		; if so, do nothing at all
+				CP		' '				; is the character a ' '
+				JR		Z, TXB_END		; if so, do nothing at all
 				CALL	display_clear	; else clear then print the character
-TXB_NOT_LF:		
+TXB_NOT_LF:
+				LD		A, (display_ptr)
+				CP		$10				; is the cursor at the last position?
+				JR		NC, TXB_END		; past the end, do nothing
 				LD		A, C
 				CP		'a'	
 				JR		C, TXB_NOT_LCASE	; character is < 'a'
@@ -316,6 +326,10 @@ TXB_NOT_LF:
 TXB_NOT_LCASE:
 				LD		C, A
 				CALL	display_send_byte
+				LD		A, (display_ptr)
+				ADD		A, $01
+				LD		(display_ptr), A
+				LD		A, C	
 
 TXB_SAVE_LAST_CHAR:
 				; save the character we transmitted for next time
@@ -406,11 +420,14 @@ display_print_string:
     JR display_print_string
 
 display_clear:
+	PUSH	AF
 	PUSH	BC
 	PUSH	DE
-    LD C,$AF           ; set the cursor to the beginning of the line
+	LD A, $00			; clear display character index
+	LD (display_ptr), A
+    LD C,$AF			; set the cursor to the beginning of the line
     CALL display_send_byte
-    LD D,$10           ; 16 spaces to print
+    LD D,$10			; 16 spaces to print
 display_clear_l1:
 	LD C,' '
     CALL display_send_byte
@@ -418,6 +435,7 @@ display_clear_l1:
     JR NZ,display_clear_l1
 	POP		DE
 	POP		BC
+	POP		AF
     RET
 
 display_send_byte:
