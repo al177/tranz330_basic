@@ -20,8 +20,8 @@
 ; Full input buffering with incoming data hardware handshaking
 ; Handshake shows full before the buffer is totally filled to allow run-on from the sender
 
-SER_BUFSIZE     .EQU     3FH
-SER_FULLSIZE    .EQU     30H
+SER_BUFSIZE     .EQU     5FH
+SER_FULLSIZE    .EQU     20H
 SER_EMPTYSIZE   .EQU     5
 
 ; Address of CTC for PORT B serial for setting baud rates
@@ -35,24 +35,24 @@ SIOB_C          .EQU     $23
 RTS_HIGH        .EQU    0E8H
 RTS_LOW         .EQU    0EAH
 
-serBuf          .EQU     $8000
+serBuf          .EQU     $8050
 serInPtr        .EQU     serBuf+SER_BUFSIZE
 serRdPtr        .EQU     serInPtr+2
 serBufUsed      .EQU     serRdPtr+2
 
 serInMask       .EQU     serInPtr&$FF
 
-ser2Buf         .EQU     $8050
+ser2Buf         .EQU     $8000
 ser2InPtr       .EQU     ser2Buf+SER_BUFSIZE
 ser2RdPtr       .EQU     ser2InPtr+2
 ser2BufUsed     .EQU     ser2RdPtr+2
 
 ser2InMask      .EQU     ser2InPtr&$FF
 
-keypad_last_keycode .EQU	$80A0
-keypad_shift		.EQU	$80A1
-keypad_buffer		.EQU	$80A2
-display_last_char	.EQU	$80A3
+keypad_last_keycode .EQU	$8090
+keypad_shift		.EQU	$8091
+keypad_buffer		.EQU	$8092
+display_last_char	.EQU	$8093
 
 TEMPSTACK       .EQU     $FFF0           ; temporary stack somewhere near the
                                          ; end of high mem
@@ -569,10 +569,10 @@ INIT:          LD        HL,TEMPSTACK    ; Temp stack
                 LD      A,$C1			; Enable RX, 8 bit, no auto, no CRC
                 OUT     (SIOB_C),A
 
-               ; baud generator for 2nd serial port, default to 115200
+               ; baud generator for 2nd serial port, default to 9600
                LD       A, 5DH
-               OUT      (CTC_PORTB), A  ; 115200
-               LD       A, 1
+               OUT      (CTC_PORTB), A  ; 9600
+               LD       A, 12
                OUT      (CTC_PORTB), A
 				LD		A, 'H'
 				CALL	TXB
