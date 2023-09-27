@@ -16,9 +16,12 @@ Build directions are forthcoming.  If you want to try this on your own hardware,
 
 ## Notes on loading eliza with GNU screen
 
-1. Make sure your screenrc has `defslowpaste 100` in it
-2. Start screen on the serial port (`screen /dev/ttyUSB0 9600`) or so
+1. Make sure your screenrc has `defslowpaste 20` in it
+2. Start screen on the serial port (`screen /dev/ttyUSB0 9600`) 
 3. Load the file into the register "p"
-    `[CTRL-A]:readreg p git/tranz330_basic/eliza_cc1977_tranz330.bas`
-4. Send the register
+
+    `[CTRL-A]:readreg p ~/git/tranz330_basic/eliza_cc1977_tranz330.bas`
+
+5. Send the register
+
     `[CTRL-A]:paste p`
